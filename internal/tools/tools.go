@@ -134,6 +134,39 @@ func Register(s *mcp.Server, cfg *config.Config) {
 	})
 
 	s.Register(mcp.Tool{
+		Name:        "add_project_update",
+		Description: "Post an update to a Linear project. Optional health: onTrack, atRisk, offTrack.",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"account":{"type":"string"},
+				"project":{"type":"string","description":"Project UUID"},
+				"body":{"type":"string","description":"Markdown body of the update"},
+				"health":{"type":"string","enum":["onTrack","atRisk","offTrack"],"description":"Optional project health"}
+			},
+			"required":["account","project","body"],
+			"additionalProperties":false
+		}`),
+		Handler: makeAddProjectUpdate(cfg),
+	})
+
+	s.Register(mcp.Tool{
+		Name:        "list_project_updates",
+		Description: "List updates posted to a Linear project.",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"account":{"type":"string"},
+				"project":{"type":"string","description":"Project UUID"},
+				"limit":{"type":"integer","default":50,"maximum":100}
+			},
+			"required":["account","project"],
+			"additionalProperties":false
+		}`),
+		Handler: makeListProjectUpdates(cfg),
+	})
+
+	s.Register(mcp.Tool{
 		Name:        "list_projects",
 		Description: "List projects, optionally filtered by team.",
 		InputSchema: json.RawMessage(`{
