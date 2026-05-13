@@ -338,6 +338,102 @@ func makeListComments(cfg *config.Config) func(context.Context, json.RawMessage)
 	}
 }
 
+func makeAddProjectUpdate(cfg *config.Config) func(context.Context, json.RawMessage) (string, error) {
+	return func(ctx context.Context, raw json.RawMessage) (string, error) {
+		var a struct {
+			baseArgs
+			Project string `json:"project"`
+			Body    string `json:"body"`
+			Health  string `json:"health"`
+		}
+		if err := json.Unmarshal(raw, &a); err != nil {
+			return "", err
+		}
+		c, err := clientFor(cfg, a.Account)
+		if err != nil {
+			return "", err
+		}
+		input := map[string]any{
+			"projectId": a.Project,
+			"body":      a.Body,
+		}
+		if a.Health != "" {
+			switch a.Health {
+			case "onTrack", "atRisk", "offTrack":
+				input["health"] = a.Health
+			default:
+				return "", fmt.Errorf("invalid health: %s (want onTrack|atRisk|offTrack)", a.Health)
+			}
+		}
+		query := `
+			mutation ProjectUpdateCreate($input: ProjectUpdateCreateInput!) {
+				projectUpdateCreate(input: $input) {
+					success
+					projectUpdate {
+						id body url health createdAt
+						user { name email }
+						project { id name }
+					}
+				}
+			}`
+		var out struct {
+			ProjectUpdateCreate struct {
+				Success       bool           `json:"success"`
+				ProjectUpdate map[string]any `json:"projectUpdate"`
+			} `json:"projectUpdateCreate"`
+		}
+		if err := c.Query(ctx, query, map[string]any{"input": input}, &out); err != nil {
+			return "", err
+		}
+		if !out.ProjectUpdateCreate.Success {
+			return "", fmt.Errorf("projectUpdateCreate returned success=false")
+		}
+		return jsonStr(out.ProjectUpdateCreate.ProjectUpdate), nil
+	}
+}
+
+func makeListProjectUpdates(cfg *config.Config) func(context.Context, json.RawMessage) (string, error) {
+	return func(ctx context.Context, raw json.RawMessage) (string, error) {
+		var a struct {
+			baseArgs
+			Project string `json:"project"`
+			Limit   int    `json:"limit"`
+		}
+		if err := json.Unmarshal(raw, &a); err != nil {
+			return "", err
+		}
+		if a.Limit == 0 {
+			a.Limit = 50
+		}
+		c, err := clientFor(cfg, a.Account)
+		if err != nil {
+			return "", err
+		}
+		query := `
+			query ProjectUpdates($id: String!, $first: Int) {
+				project(id: $id) {
+					projectUpdates(first: $first) {
+						nodes {
+							id body url health createdAt updatedAt
+							user { name email }
+						}
+					}
+				}
+			}`
+		var out struct {
+			Project struct {
+				ProjectUpdates struct {
+					Nodes []map[string]any `json:"nodes"`
+				} `json:"projectUpdates"`
+			} `json:"project"`
+		}
+		if err := c.Query(ctx, query, map[string]any{"id": a.Project, "first": a.Limit}, &out); err != nil {
+			return "", err
+		}
+		return jsonStr(out.Project.ProjectUpdates.Nodes), nil
+	}
+}
+
 func makeListProjects(cfg *config.Config) func(context.Context, json.RawMessage) (string, error) {
 	return func(ctx context.Context, raw json.RawMessage) (string, error) {
 		var a struct {

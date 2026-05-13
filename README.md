@@ -44,7 +44,7 @@ Neither is convenient when an agent needs to read a ticket from one workspace an
 ## Features
 
 - 🔀 **Multi-account routing** — every tool takes an `account` parameter; the server picks the matching token at call time.
-- 🧰 **Nine tools, MVP-shaped** — list/get/create/update issues, list/add comments, list teams and projects, plus an introspection tool that lists configured accounts.
+- 🧰 **Eleven tools, MVP-shaped** — list/get/create/update issues, list/add comments, list/add project updates, list teams and projects, plus an introspection tool that lists configured accounts.
 - 🪶 **Zero runtime dependencies** — single static Go binary. No Node, no Python, no Docker.
 - 🧱 **Hand-rolled GraphQL client** — Linear's API is GraphQL, so there's a 70-line client and no SDK to keep in sync.
 - 🔐 **Local-only secrets** — keys stay in a `0600` JSON file under your user config dir; never shipped anywhere else.
@@ -153,6 +153,8 @@ Every tool requires an `account` argument — the name you registered with `line
 | `update_issue`   | `account`, `id`            | Update `title`, `description`, `state` (name), `assignee`.         |
 | `list_comments`  | `account`, `id`            | Comments on an issue.                                              |
 | `add_comment`    | `account`, `id`, `body`    | Append a comment.                                                  |
+| `list_project_updates` | `account`, `project`       | Updates posted to a project.                                       |
+| `add_project_update`   | `account`, `project`, `body` | Post an update; optional `health` (`onTrack`/`atRisk`/`offTrack`). |
 
 **Convenience resolvers** — you can pass human-friendly references and the server resolves them to UUIDs before calling the GraphQL API:
 
