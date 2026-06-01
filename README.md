@@ -44,7 +44,7 @@ Neither is convenient when an agent needs to read a ticket from one workspace an
 ## Features
 
 - 🔀 **Multi-account routing** — every tool takes an `account` parameter; the server picks the matching token at call time.
-- 🧰 **Eleven tools, MVP-shaped** — list/get/create/update issues, list/add comments, list/add project updates, list teams and projects, plus an introspection tool that lists configured accounts.
+- 🧰 **Fourteen tools, MVP-shaped** — list/get/create/update issues, subtasks (parent/child), blocking relations, list/add comments, list teams and projects, plus an introspection tool that lists configured accounts.
 - 🪶 **Zero runtime dependencies** — single static Go binary. No Node, no Python, no Docker.
 - 🧱 **Hand-rolled GraphQL client** — Linear's API is GraphQL, so there's a 70-line client and no SDK to keep in sync.
 - 🔐 **Local-only secrets** — keys stay in a `0600` JSON file under your user config dir; never shipped anywhere else.
@@ -120,7 +120,7 @@ Add to your MCP server config (`~/.claude.json`, or whatever your client uses):
 
 > ⚠️ MCP clients do not expand `~` or `$HOME`. The `command` field must be a fully absolute path. Use `which linear-orch` to find it after `make install`.
 
-Restart the client. `linear-orch` should appear in the connected servers list, exposing the nine tools below.
+Restart the client. `linear-orch` should appear in the connected servers list, exposing the fourteen tools below.
 
 ### Cursor / other MCP clients
 
@@ -148,9 +148,13 @@ Every tool requires an `account` argument — the name you registered with `line
 | `list_teams`     | `account`                  | All teams in the workspace.                                        |
 | `list_projects`  | `account`                  | Projects, optional `team` filter (key or UUID).                    |
 | `list_issues`    | `account`                  | Filter by `team`, `project`, `assignee`, `state`, `limit`.         |
-| `get_issue`      | `account`, `id`            | Fetch one issue by `ENG-123` or UUID.                              |
-| `create_issue`   | `account`, `team`, `title` | Optional `description`, `assignee` (email/UUID), `project`.        |
+| `get_issue`      | `account`, `id`            | Fetch one issue by `ENG-123` or UUID; includes `parent`, `children`, and `relations` / `inverseRelations`. |
+| `create_issue`   | `account`, `team`, `title` | Optional `description`, `assignee` (email/UUID), `project`, `parent` (makes it a subtask). |
 | `update_issue`   | `account`, `id`            | Update `title`, `description`, `state` (name), `assignee`.         |
+| `list_subtasks`  | `account`, `id`            | Child issues (subtasks) of an issue.                              |
+| `set_parent`     | `account`, `id`, `parent`  | Attach issue under a parent. Empty `parent` detaches it.          |
+| `add_relation`   | `account`, `id`, `related` | Relate two issues; `type` = `blocks` (default) / `related` / `duplicate`. |
+| `remove_relation`| `account`, `relation_id`   | Delete a relation by its UUID (from `get_issue`).                 |
 | `list_comments`  | `account`, `id`            | Comments on an issue.                                              |
 | `add_comment`    | `account`, `id`, `body`    | Append a comment.                                                  |
 | `list_project_updates` | `account`, `project`       | Updates posted to a project.                                       |
