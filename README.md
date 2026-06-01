@@ -157,6 +157,8 @@ Every tool requires an `account` argument — the name you registered with `line
 | `remove_relation`| `account`, `relation_id`   | Delete a relation by its UUID (from `get_issue`).                 |
 | `list_comments`  | `account`, `id`            | Comments on an issue.                                              |
 | `add_comment`    | `account`, `id`, `body`    | Append a comment.                                                  |
+| `list_project_updates` | `account`, `project`       | Updates posted to a project.                                       |
+| `add_project_update`   | `account`, `project`, `body` | Post an update; optional `health` (`onTrack`/`atRisk`/`offTrack`). |
 
 **Convenience resolvers** — you can pass human-friendly references and the server resolves them to UUIDs before calling the GraphQL API:
 
