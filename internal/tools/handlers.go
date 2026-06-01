@@ -105,6 +105,10 @@ func makeGetIssue(cfg *config.Config) func(context.Context, json.RawMessage) (st
 					team { key name }
 					project { name id }
 					priority createdAt updatedAt
+					parent { id identifier title url state { name type } }
+					children { nodes { id identifier title url state { name type } assignee { name email } } }
+					relations { nodes { id type relatedIssue { id identifier title url state { name type } } } }
+					inverseRelations { nodes { id type issue { id identifier title url state { name type } } } }
 				}
 			}`
 		var out struct {
@@ -130,6 +134,7 @@ func makeCreateIssue(cfg *config.Config) func(context.Context, json.RawMessage) 
 			Description string `json:"description"`
 			Assignee    string `json:"assignee"`
 			Project     string `json:"project"`
+			Parent      string `json:"parent"`
 		}
 		if err := json.Unmarshal(raw, &a); err != nil {
 			return "", err
@@ -151,6 +156,13 @@ func makeCreateIssue(cfg *config.Config) func(context.Context, json.RawMessage) 
 		}
 		if a.Project != "" {
 			input["projectId"] = a.Project
+		}
+		if a.Parent != "" {
+			parentID, _, err := resolveIssue(ctx, c, a.Parent)
+			if err != nil {
+				return "", fmt.Errorf("resolve parent: %w", err)
+			}
+			input["parentId"] = parentID
 		}
 		if a.Assignee != "" {
 			uid, err := resolveUserID(ctx, c, a.Assignee)
@@ -335,6 +347,205 @@ func makeListComments(cfg *config.Config) func(context.Context, json.RawMessage)
 			return "", err
 		}
 		return jsonStr(out.Issue.Comments.Nodes), nil
+	}
+}
+
+func makeListSubtasks(cfg *config.Config) func(context.Context, json.RawMessage) (string, error) {
+	return func(ctx context.Context, raw json.RawMessage) (string, error) {
+		var a struct {
+			baseArgs
+			ID    string `json:"id"`
+			Limit int    `json:"limit"`
+		}
+		if err := json.Unmarshal(raw, &a); err != nil {
+			return "", err
+		}
+		if a.Limit == 0 {
+			a.Limit = 50
+		}
+		c, err := clientFor(cfg, a.Account)
+		if err != nil {
+			return "", err
+		}
+		query := `
+			query Subtasks($id: String!, $first: Int) {
+				issue(id: $id) {
+					children(first: $first) {
+						nodes {
+							id identifier title url
+							state { name type }
+							assignee { name email }
+							priority createdAt updatedAt
+						}
+					}
+				}
+			}`
+		var out struct {
+			Issue struct {
+				Children struct {
+					Nodes []map[string]any `json:"nodes"`
+				} `json:"children"`
+			} `json:"issue"`
+		}
+		err = c.Query(ctx, query, map[string]any{"id": a.ID, "first": a.Limit}, &out)
+		if err != nil {
+			return "", err
+		}
+		return jsonStr(out.Issue.Children.Nodes), nil
+	}
+}
+
+func makeSetParent(cfg *config.Config) func(context.Context, json.RawMessage) (string, error) {
+	return func(ctx context.Context, raw json.RawMessage) (string, error) {
+		var a struct {
+			baseArgs
+			ID     string `json:"id"`
+			Parent string `json:"parent"`
+		}
+		if err := json.Unmarshal(raw, &a); err != nil {
+			return "", err
+		}
+		c, err := clientFor(cfg, a.Account)
+		if err != nil {
+			return "", err
+		}
+		issueID, _, err := resolveIssue(ctx, c, a.ID)
+		if err != nil {
+			return "", err
+		}
+		input := map[string]any{}
+		if a.Parent == "" {
+			input["parentId"] = nil
+		} else {
+			parentID, _, err := resolveIssue(ctx, c, a.Parent)
+			if err != nil {
+				return "", fmt.Errorf("resolve parent: %w", err)
+			}
+			if parentID == issueID {
+				return "", fmt.Errorf("an issue cannot be its own parent")
+			}
+			input["parentId"] = parentID
+		}
+		query := `
+			mutation SetParent($id: String!, $input: IssueUpdateInput!) {
+				issueUpdate(id: $id, input: $input) {
+					success
+					issue {
+						id identifier title url
+						parent { id identifier title url }
+					}
+				}
+			}`
+		var out struct {
+			IssueUpdate struct {
+				Success bool           `json:"success"`
+				Issue   map[string]any `json:"issue"`
+			} `json:"issueUpdate"`
+		}
+		err = c.Query(ctx, query, map[string]any{"id": issueID, "input": input}, &out)
+		if err != nil {
+			return "", err
+		}
+		if !out.IssueUpdate.Success {
+			return "", fmt.Errorf("issueUpdate returned success=false")
+		}
+		return jsonStr(out.IssueUpdate.Issue), nil
+	}
+}
+
+func makeAddRelation(cfg *config.Config) func(context.Context, json.RawMessage) (string, error) {
+	return func(ctx context.Context, raw json.RawMessage) (string, error) {
+		var a struct {
+			baseArgs
+			ID      string `json:"id"`
+			Related string `json:"related"`
+			Type    string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &a); err != nil {
+			return "", err
+		}
+		if a.Type == "" {
+			a.Type = "blocks"
+		}
+		switch a.Type {
+		case "blocks", "related", "duplicate":
+		default:
+			return "", fmt.Errorf("invalid relation type %q (want blocks, related, or duplicate)", a.Type)
+		}
+		c, err := clientFor(cfg, a.Account)
+		if err != nil {
+			return "", err
+		}
+		issueID, _, err := resolveIssue(ctx, c, a.ID)
+		if err != nil {
+			return "", err
+		}
+		relatedID, _, err := resolveIssue(ctx, c, a.Related)
+		if err != nil {
+			return "", fmt.Errorf("resolve related: %w", err)
+		}
+		if relatedID == issueID {
+			return "", fmt.Errorf("an issue cannot relate to itself")
+		}
+		query := `
+			mutation Relate($input: IssueRelationCreateInput!) {
+				issueRelationCreate(input: $input) {
+					success
+					issueRelation {
+						id type
+						issue { identifier title url }
+						relatedIssue { identifier title url }
+					}
+				}
+			}`
+		input := map[string]any{"issueId": issueID, "relatedIssueId": relatedID, "type": a.Type}
+		var out struct {
+			IssueRelationCreate struct {
+				Success       bool           `json:"success"`
+				IssueRelation map[string]any `json:"issueRelation"`
+			} `json:"issueRelationCreate"`
+		}
+		err = c.Query(ctx, query, map[string]any{"input": input}, &out)
+		if err != nil {
+			return "", err
+		}
+		if !out.IssueRelationCreate.Success {
+			return "", fmt.Errorf("issueRelationCreate returned success=false")
+		}
+		return jsonStr(out.IssueRelationCreate.IssueRelation), nil
+	}
+}
+
+func makeRemoveRelation(cfg *config.Config) func(context.Context, json.RawMessage) (string, error) {
+	return func(ctx context.Context, raw json.RawMessage) (string, error) {
+		var a struct {
+			baseArgs
+			RelationID string `json:"relation_id"`
+		}
+		if err := json.Unmarshal(raw, &a); err != nil {
+			return "", err
+		}
+		c, err := clientFor(cfg, a.Account)
+		if err != nil {
+			return "", err
+		}
+		query := `
+			mutation Unrelate($id: String!) {
+				issueRelationDelete(id: $id) { success }
+			}`
+		var out struct {
+			IssueRelationDelete struct {
+				Success bool `json:"success"`
+			} `json:"issueRelationDelete"`
+		}
+		err = c.Query(ctx, query, map[string]any{"id": a.RelationID}, &out)
+		if err != nil {
+			return "", err
+		}
+		if !out.IssueRelationDelete.Success {
+			return "", fmt.Errorf("issueRelationDelete returned success=false")
+		}
+		return jsonStr(map[string]any{"deleted": a.RelationID, "success": true}), nil
 	}
 }
 

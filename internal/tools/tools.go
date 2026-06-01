@@ -74,7 +74,8 @@ func Register(s *mcp.Server, cfg *config.Config) {
 				"title":{"type":"string"},
 				"description":{"type":"string"},
 				"assignee":{"type":"string","description":"Assignee email or UUID (optional)"},
-				"project":{"type":"string","description":"Project UUID (optional)"}
+				"project":{"type":"string","description":"Project UUID (optional)"},
+				"parent":{"type":"string","description":"Parent issue identifier (ENG-123) or UUID. Set to make this a subtask (optional)."}
 			},
 			"required":["account","team","title"],
 			"additionalProperties":false
@@ -131,6 +132,70 @@ func Register(s *mcp.Server, cfg *config.Config) {
 			"additionalProperties":false
 		}`),
 		Handler: makeListComments(cfg),
+	})
+
+	s.Register(mcp.Tool{
+		Name:        "list_subtasks",
+		Description: "List subtasks (child issues) of a Linear issue.",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"account":{"type":"string"},
+				"id":{"type":"string","description":"Parent issue identifier (ENG-123) or UUID"},
+				"limit":{"type":"integer","default":50,"maximum":100}
+			},
+			"required":["account","id"],
+			"additionalProperties":false
+		}`),
+		Handler: makeListSubtasks(cfg),
+	})
+
+	s.Register(mcp.Tool{
+		Name:        "set_parent",
+		Description: "Set or clear the parent of a Linear issue, turning it into a subtask (or detaching it).",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"account":{"type":"string"},
+				"id":{"type":"string","description":"Issue identifier (ENG-123) or UUID"},
+				"parent":{"type":"string","description":"Parent issue identifier or UUID. Empty string detaches the issue from its parent."}
+			},
+			"required":["account","id","parent"],
+			"additionalProperties":false
+		}`),
+		Handler: makeSetParent(cfg),
+	})
+
+	s.Register(mcp.Tool{
+		Name:        "add_relation",
+		Description: "Create a relation between two Linear issues. Use type 'blocks' to mark that the issue blocks another (an inverse 'blocked by' is created automatically).",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"account":{"type":"string"},
+				"id":{"type":"string","description":"Source issue identifier (ENG-123) or UUID"},
+				"related":{"type":"string","description":"Target issue identifier or UUID"},
+				"type":{"type":"string","enum":["blocks","related","duplicate"],"default":"blocks","description":"Relation type. 'blocks' means id blocks related."}
+			},
+			"required":["account","id","related"],
+			"additionalProperties":false
+		}`),
+		Handler: makeAddRelation(cfg),
+	})
+
+	s.Register(mcp.Tool{
+		Name:        "remove_relation",
+		Description: "Delete an issue relation by its relation ID (see the 'relations' field from get_issue).",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"account":{"type":"string"},
+				"relation_id":{"type":"string","description":"IssueRelation UUID"}
+			},
+			"required":["account","relation_id"],
+			"additionalProperties":false
+		}`),
+		Handler: makeRemoveRelation(cfg),
 	})
 
 	s.Register(mcp.Tool{
