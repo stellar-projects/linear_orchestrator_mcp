@@ -215,6 +215,39 @@ func Register(s *mcp.Server, cfg *config.Config) {
 	})
 
 	s.Register(mcp.Tool{
+		Name:        "add_project_update",
+		Description: "Post a project update (status activity) to a Linear project. Optionally set health to onTrack, atRisk, or offTrack.",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"account":{"type":"string"},
+				"project":{"type":"string","description":"Project UUID or exact project name"},
+				"body":{"type":"string","description":"Update body (markdown)"},
+				"health":{"type":"string","enum":["onTrack","atRisk","offTrack"],"description":"Project health (optional)"}
+			},
+			"required":["account","project","body"],
+			"additionalProperties":false
+		}`),
+		Handler: makeAddProjectUpdate(cfg),
+	})
+
+	s.Register(mcp.Tool{
+		Name:        "list_project_updates",
+		Description: "List project updates (status activity feed) for a Linear project.",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"account":{"type":"string"},
+				"project":{"type":"string","description":"Project UUID or exact project name"},
+				"limit":{"type":"integer","default":50,"maximum":100}
+			},
+			"required":["account","project"],
+			"additionalProperties":false
+		}`),
+		Handler: makeListProjectUpdates(cfg),
+	})
+
+	s.Register(mcp.Tool{
 		Name:        "list_teams",
 		Description: "List all teams in the workspace.",
 		InputSchema: json.RawMessage(`{

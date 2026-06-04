@@ -597,6 +597,109 @@ func makeListProjects(cfg *config.Config) func(context.Context, json.RawMessage)
 	}
 }
 
+func makeAddProjectUpdate(cfg *config.Config) func(context.Context, json.RawMessage) (string, error) {
+	return func(ctx context.Context, raw json.RawMessage) (string, error) {
+		var a struct {
+			baseArgs
+			Project string `json:"project"`
+			Body    string `json:"body"`
+			Health  string `json:"health"`
+		}
+		if err := json.Unmarshal(raw, &a); err != nil {
+			return "", err
+		}
+		c, err := clientFor(cfg, a.Account)
+		if err != nil {
+			return "", err
+		}
+		projectID, err := resolveProjectID(ctx, c, a.Project)
+		if err != nil {
+			return "", err
+		}
+		input := map[string]any{"projectId": projectID, "body": a.Body}
+		if a.Health != "" {
+			switch a.Health {
+			case "onTrack", "atRisk", "offTrack":
+			default:
+				return "", fmt.Errorf("invalid health %q (want onTrack, atRisk, or offTrack)", a.Health)
+			}
+			input["health"] = a.Health
+		}
+		query := `
+			mutation ProjectUpdate($input: ProjectUpdateCreateInput!) {
+				projectUpdateCreate(input: $input) {
+					success
+					projectUpdate {
+						id body health url createdAt
+						user { name email }
+						project { id name }
+					}
+				}
+			}`
+		var out struct {
+			ProjectUpdateCreate struct {
+				Success       bool           `json:"success"`
+				ProjectUpdate map[string]any `json:"projectUpdate"`
+			} `json:"projectUpdateCreate"`
+		}
+		err = c.Query(ctx, query, map[string]any{"input": input}, &out)
+		if err != nil {
+			return "", err
+		}
+		if !out.ProjectUpdateCreate.Success {
+			return "", fmt.Errorf("projectUpdateCreate returned success=false")
+		}
+		return jsonStr(out.ProjectUpdateCreate.ProjectUpdate), nil
+	}
+}
+
+func makeListProjectUpdates(cfg *config.Config) func(context.Context, json.RawMessage) (string, error) {
+	return func(ctx context.Context, raw json.RawMessage) (string, error) {
+		var a struct {
+			baseArgs
+			Project string `json:"project"`
+			Limit   int    `json:"limit"`
+		}
+		if err := json.Unmarshal(raw, &a); err != nil {
+			return "", err
+		}
+		if a.Limit == 0 {
+			a.Limit = 50
+		}
+		c, err := clientFor(cfg, a.Account)
+		if err != nil {
+			return "", err
+		}
+		projectID, err := resolveProjectID(ctx, c, a.Project)
+		if err != nil {
+			return "", err
+		}
+		query := `
+			query ProjectUpdates($id: String!, $first: Int) {
+				project(id: $id) {
+					projectUpdates(first: $first) {
+						nodes {
+							id body health url createdAt updatedAt
+							user { name email }
+						}
+					}
+				}
+			}`
+		var out struct {
+			Project struct {
+				ProjectUpdates struct {
+					Nodes []map[string]any `json:"nodes"`
+				} `json:"projectUpdates"`
+			} `json:"project"`
+		}
+		err = c.Query(ctx, query, map[string]any{"id": projectID, "first": a.Limit}, &out)
+		if err != nil {
+			return "", err
+		}
+		return jsonStr(out.Project.ProjectUpdates.Nodes), nil
+	}
+}
+
 func makeListTeams(cfg *config.Config) func(context.Context, json.RawMessage) (string, error) {
 	return func(ctx context.Context, raw json.RawMessage) (string, error) {
 		var a baseArgs
@@ -698,6 +801,32 @@ func resolveIssue(ctx context.Context, c *linear.Client, ref string) (id, teamID
 		return "", "", fmt.Errorf("issue not found: %s", ref)
 	}
 	return out.Issue.ID, out.Issue.Team.ID, nil
+}
+
+func resolveProjectID(ctx context.Context, c *linear.Client, ref string) (string, error) {
+	if isUUID(ref) {
+		return ref, nil
+	}
+	query := `
+		query ProjectByName($name: String!) {
+			projects(filter: { name: { eq: $name } }, first: 1) {
+				nodes { id }
+			}
+		}`
+	var out struct {
+		Projects struct {
+			Nodes []struct {
+				ID string `json:"id"`
+			} `json:"nodes"`
+		} `json:"projects"`
+	}
+	if err := c.Query(ctx, query, map[string]any{"name": ref}, &out); err != nil {
+		return "", err
+	}
+	if len(out.Projects.Nodes) == 0 {
+		return "", fmt.Errorf("project not found: %s", ref)
+	}
+	return out.Projects.Nodes[0].ID, nil
 }
 
 func resolveStateID(ctx context.Context, c *linear.Client, teamID, stateName string) (string, error) {

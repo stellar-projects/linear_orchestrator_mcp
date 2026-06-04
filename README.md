@@ -44,7 +44,7 @@ Neither is convenient when an agent needs to read a ticket from one workspace an
 ## Features
 
 - 🔀 **Multi-account routing** — every tool takes an `account` parameter; the server picks the matching token at call time.
-- 🧰 **Sixteen tools, MVP-shaped** — list/get/create/update issues, subtasks (parent/child), blocking relations, list/add comments, project updates, list teams and projects, plus an introspection tool that lists configured accounts.
+- 🧰 **Fifteen tools, MVP-shaped** — list/get/create/update issues, subtasks (parent/child), blocking relations, list/add comments, project updates, list teams and projects, plus an introspection tool that lists configured accounts.
 - 🪶 **Zero runtime dependencies** — single static Go binary. No Node, no Python, no Docker.
 - 🧱 **Hand-rolled GraphQL client** — Linear's API is GraphQL, so there's a 70-line client and no SDK to keep in sync.
 - 🔐 **Local-only secrets** — keys stay in a `0600` JSON file under your user config dir; never shipped anywhere else.
@@ -120,7 +120,7 @@ Add to your MCP server config (`~/.claude.json`, or whatever your client uses):
 
 > ⚠️ MCP clients do not expand `~` or `$HOME`. The `command` field must be a fully absolute path. Use `which linear-orch` to find it after `make install`.
 
-Restart the client. `linear-orch` should appear in the connected servers list, exposing the sixteen tools below.
+Restart the client. `linear-orch` should appear in the connected servers list, exposing the fifteen tools below.
 
 ### Cursor / other MCP clients
 
@@ -165,6 +165,7 @@ Every tool requires an `account` argument — the name you registered with `line
 - `team`: team key (e.g. `ENG`) → team UUID
 - `assignee`: email → user UUID
 - `state`: workflow state name (e.g. `In Progress`) → state UUID
+- `project`: exact project name → project UUID
 - `id` on issues: `ENG-123` is accepted directly by Linear's API
 
 ## Configuration
