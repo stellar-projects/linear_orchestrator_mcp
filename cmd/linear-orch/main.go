@@ -14,7 +14,7 @@ import (
 	"github.com/serdarcoskun/linear-orchestrator/internal/tools"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -34,6 +34,8 @@ func main() {
 		p, err := config.Path()
 		check(err)
 		fmt.Println(p)
+	case "version", "-v", "--version":
+		fmt.Println(version)
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -53,6 +55,7 @@ Usage:
   linear-orch remove <account>
   linear-orch serve                    (run MCP server over stdio)
   linear-orch path                     (print config file path)
+  linear-orch version                  (print version)
 
 Config: ~/Library/Application Support/linear-orchestrator/config.json (macOS)
         ~/.config/linear-orchestrator/config.json (Linux)

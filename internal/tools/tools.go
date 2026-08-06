@@ -75,7 +75,9 @@ func Register(s *mcp.Server, cfg *config.Config) {
 				"description":{"type":"string"},
 				"assignee":{"type":"string","description":"Assignee email or UUID (optional)"},
 				"project":{"type":"string","description":"Project UUID (optional)"},
-				"parent":{"type":"string","description":"Parent issue identifier (ENG-123) or UUID. Set to make this a subtask (optional)."}
+				"parent":{"type":"string","description":"Parent issue identifier (ENG-123) or UUID. Set to make this a subtask (optional)."},
+				"priority":{"type":"integer","minimum":0,"maximum":4,"description":"Priority: 0=None, 1=Urgent, 2=High, 3=Normal, 4=Low (optional)"},
+				"labels":{"type":"array","items":{"type":"string"},"description":"Label names or UUIDs to apply (optional)"}
 			},
 			"required":["account","team","title"],
 			"additionalProperties":false
@@ -94,7 +96,9 @@ func Register(s *mcp.Server, cfg *config.Config) {
 				"title":{"type":"string"},
 				"description":{"type":"string"},
 				"state":{"type":"string","description":"Workflow state name"},
-				"assignee":{"type":"string","description":"Assignee email or UUID"}
+				"assignee":{"type":"string","description":"Assignee email or UUID"},
+				"priority":{"type":"integer","minimum":0,"maximum":4,"description":"Priority: 0=None, 1=Urgent, 2=High, 3=Normal, 4=Low"},
+				"labels":{"type":"array","items":{"type":"string"},"description":"Label names or UUIDs. Replaces the issue's full label set; [] clears all labels."}
 			},
 			"required":["account","id"],
 			"additionalProperties":false

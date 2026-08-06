@@ -105,6 +105,7 @@ func makeGetIssue(cfg *config.Config) func(context.Context, json.RawMessage) (st
 					team { key name }
 					project { name id }
 					priority createdAt updatedAt
+					labels { nodes { id name color } }
 					parent { id identifier title url state { name type } }
 					children { nodes { id identifier title url state { name type } assignee { name email } } }
 					relations { nodes { id type relatedIssue { id identifier title url state { name type } } } }
@@ -129,12 +130,14 @@ func makeCreateIssue(cfg *config.Config) func(context.Context, json.RawMessage) 
 	return func(ctx context.Context, raw json.RawMessage) (string, error) {
 		var a struct {
 			baseArgs
-			Team        string `json:"team"`
-			Title       string `json:"title"`
-			Description string `json:"description"`
-			Assignee    string `json:"assignee"`
-			Project     string `json:"project"`
-			Parent      string `json:"parent"`
+			Team        string   `json:"team"`
+			Title       string   `json:"title"`
+			Description string   `json:"description"`
+			Assignee    string   `json:"assignee"`
+			Project     string   `json:"project"`
+			Parent      string   `json:"parent"`
+			Priority    *int     `json:"priority"`
+			Labels      []string `json:"labels"`
 		}
 		if err := json.Unmarshal(raw, &a); err != nil {
 			return "", err
@@ -171,11 +174,24 @@ func makeCreateIssue(cfg *config.Config) func(context.Context, json.RawMessage) 
 			}
 			input["assigneeId"] = uid
 		}
+		if a.Priority != nil {
+			if err := validPriority(*a.Priority); err != nil {
+				return "", err
+			}
+			input["priority"] = *a.Priority
+		}
+		if len(a.Labels) > 0 {
+			ids, err := resolveLabelIDs(ctx, c, teamID, a.Labels)
+			if err != nil {
+				return "", err
+			}
+			input["labelIds"] = ids
+		}
 		query := `
 			mutation Create($input: IssueCreateInput!) {
 				issueCreate(input: $input) {
 					success
-					issue { id identifier title url }
+					issue { id identifier title url priority labels { nodes { id name color } } }
 				}
 			}`
 		var out struct {
@@ -199,11 +215,13 @@ func makeUpdateIssue(cfg *config.Config) func(context.Context, json.RawMessage) 
 	return func(ctx context.Context, raw json.RawMessage) (string, error) {
 		var a struct {
 			baseArgs
-			ID          string `json:"id"`
-			Title       string `json:"title"`
-			Description string `json:"description"`
-			State       string `json:"state"`
-			Assignee    string `json:"assignee"`
+			ID          string   `json:"id"`
+			Title       string   `json:"title"`
+			Description string   `json:"description"`
+			State       string   `json:"state"`
+			Assignee    string   `json:"assignee"`
+			Priority    *int     `json:"priority"`
+			Labels      []string `json:"labels"`
 		}
 		if err := json.Unmarshal(raw, &a); err != nil {
 			return "", err
@@ -237,6 +255,19 @@ func makeUpdateIssue(cfg *config.Config) func(context.Context, json.RawMessage) 
 			}
 			input["stateId"] = sid
 		}
+		if a.Priority != nil {
+			if err := validPriority(*a.Priority); err != nil {
+				return "", err
+			}
+			input["priority"] = *a.Priority
+		}
+		if a.Labels != nil {
+			ids, err := resolveLabelIDs(ctx, c, teamID, a.Labels)
+			if err != nil {
+				return "", err
+			}
+			input["labelIds"] = ids
+		}
 		if len(input) == 0 {
 			return "", fmt.Errorf("nothing to update")
 		}
@@ -244,7 +275,7 @@ func makeUpdateIssue(cfg *config.Config) func(context.Context, json.RawMessage) 
 			mutation Update($id: String!, $input: IssueUpdateInput!) {
 				issueUpdate(id: $id, input: $input) {
 					success
-					issue { id identifier title url state { name } assignee { name email } }
+					issue { id identifier title url priority state { name } assignee { name email } labels { nodes { id name color } } }
 				}
 			}`
 		var out struct {
@@ -850,6 +881,63 @@ func resolveStateID(ctx context.Context, c *linear.Client, teamID, stateName str
 		return "", fmt.Errorf("state not found in team: %s", stateName)
 	}
 	return out.WorkflowStates.Nodes[0].ID, nil
+}
+
+// resolveLabelIDs maps label names (or UUIDs) to label UUIDs. Name matches
+// prefer a label scoped to teamID, then a workspace-level label (no team).
+func resolveLabelIDs(ctx context.Context, c *linear.Client, teamID string, refs []string) ([]string, error) {
+	ids := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if isUUID(ref) {
+			ids = append(ids, ref)
+			continue
+		}
+		query := `
+			query LabelByName($name: String!) {
+				issueLabels(filter: { name: { eqIgnoreCase: $name } }, first: 50) {
+					nodes { id name team { id } }
+				}
+			}`
+		var out struct {
+			IssueLabels struct {
+				Nodes []struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+					Team *struct {
+						ID string `json:"id"`
+					} `json:"team"`
+				} `json:"nodes"`
+			} `json:"issueLabels"`
+		}
+		if err := c.Query(ctx, query, map[string]any{"name": ref}, &out); err != nil {
+			return nil, err
+		}
+		id := ""
+		for _, n := range out.IssueLabels.Nodes {
+			if n.Team != nil && n.Team.ID == teamID {
+				id = n.ID
+				break
+			}
+			if n.Team == nil && id == "" {
+				id = n.ID
+			}
+		}
+		if id == "" {
+			if len(out.IssueLabels.Nodes) > 0 {
+				return nil, fmt.Errorf("label %q exists only in other teams", ref)
+			}
+			return nil, fmt.Errorf("label not found: %s", ref)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func validPriority(p int) error {
+	if p < 0 || p > 4 {
+		return fmt.Errorf("invalid priority %d (want 0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)", p)
+	}
+	return nil
 }
 
 func isUUID(s string) bool {

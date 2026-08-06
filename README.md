@@ -135,6 +135,7 @@ linear-orch list                                # masked token preview
 linear-orch remove <account>
 linear-orch serve                               # MCP server on stdio
 linear-orch path                                # print config file path
+linear-orch version                             # print version
 linear-orch help
 ```
 
@@ -149,8 +150,8 @@ Every tool requires an `account` argument — the name you registered with `line
 | `list_projects`  | `account`                  | Projects, optional `team` filter (key or UUID).                    |
 | `list_issues`    | `account`                  | Filter by `team`, `project`, `assignee`, `state`, `limit`.         |
 | `get_issue`      | `account`, `id`            | Fetch one issue by `ENG-123` or UUID; includes `parent`, `children`, and `relations` / `inverseRelations`. |
-| `create_issue`   | `account`, `team`, `title` | Optional `description`, `assignee` (email/UUID), `project`, `parent` (makes it a subtask). |
-| `update_issue`   | `account`, `id`            | Update `title`, `description`, `state` (name), `assignee`.         |
+| `create_issue`   | `account`, `team`, `title` | Optional `description`, `assignee` (email/UUID), `project`, `parent` (makes it a subtask), `priority` (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low), `labels` (names or UUIDs). |
+| `update_issue`   | `account`, `id`            | Update `title`, `description`, `state` (name), `assignee`, `priority` (0–4), `labels` (replaces full set; `[]` clears). |
 | `list_subtasks`  | `account`, `id`            | Child issues (subtasks) of an issue.                              |
 | `set_parent`     | `account`, `id`, `parent`  | Attach issue under a parent. Empty `parent` detaches it.          |
 | `add_relation`   | `account`, `id`, `related` | Relate two issues; `type` = `blocks` (default) / `related` / `duplicate`. |
